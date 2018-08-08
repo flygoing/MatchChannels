@@ -18,7 +18,7 @@ contract('Ether Ships', async (accounts) => {
   let user1, user2, wallet1, wallet2, generatedTree1, generatedTree2, etherShips;
 
   const board1 = [  0, 0, 0, 0, 0, 0, 1, 0,
-                    0, 0, 1, 0, 0, 0, 0, 0, 
+                    0, 0, 1, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 1, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0,
@@ -27,7 +27,7 @@ contract('Ether Ships', async (accounts) => {
                     0, 0, 0, 0, 0, 0, 0, 0];
 
   const board2 = [  0, 0, 1, 0, 0, 0, 0, 0,
-                    0, 0, 1, 0, 0, 0, 0, 0, 
+                    0, 0, 1, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 1, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0,
@@ -37,7 +37,6 @@ contract('Ether Ships', async (accounts) => {
 
   before(async () => {
     etherShips = await EtherShips.new();
-
     user1 = accounts[0];
     user2 = accounts[1];
 
@@ -47,15 +46,16 @@ contract('Ether Ships', async (accounts) => {
     wallet2 = new ethers.Wallet(privateKeys[3]);
     wallet2.provider = ethers.providers.getDefaultProvider();
 
-    await etherShips.createAccount(
+    var createAccount1Result = await etherShips.createAccount(
       "player1",
       {from: user1, value: 100}
     );
-    await etherShips.createAccount(
+    console.log("Create account1 gas used: "+ createAccount1Result.receipt.gasUsed);
+    var createAccount2Result = await etherShips.createAccount(
       "player2",
       {from: user2, value: 100}
     );
-
+    console.log("Create account2 gas used: "+ createAccount2Result.receipt.gasUsed);
     generatedTree1 = await boardService.generateTree(board1);
     generatedTree2 = await boardService.generateTree(board2);
 
@@ -63,8 +63,10 @@ contract('Ether Ships', async (accounts) => {
 
   it('Should close channel if wrong merkleTree', async() => {
       const channelId = 0;
-      await etherShips.openChannel(merkle.getRoot(generatedTree1.tree), "0", 10, wallet1.address, {from: user1});
-      await etherShips.joinChannel(channelId, merkle.getRoot(generatedTree2.tree), "0", 10,  wallet2.address, {from: user2});
+      const openChannelResult = await etherShips.openChannel(merkle.getRoot(generatedTree1.tree), "0", 10, wallet1.address, {from: user1});
+      console.log("Open channel gas cost: "+openChannelResult.receipt.gasUsed);
+      const joinChannelResult = await etherShips.joinChannel(channelId, merkle.getRoot(generatedTree2.tree), "0", 10,  wallet2.address, {from: user2});
+      console.log("Join channel gas cost: "+joinChannelResult.receipt.gasUsed);
 
       const pos = 0;
       const type = (board2[pos]+1) % 2; // different from what it should be
@@ -79,12 +81,12 @@ contract('Ether Ships', async (accounts) => {
         signature, //signature
         pos, // _pos
         0, // _seq,
-        type, // _type 
+        type, // _type
         generatedTree2.nonces[pos], // _nonce
         path.path,
         { from: user1}
       );
-
+      console.log('Dispute success gas used: '+ res.receipt.gasUsed);
       assert.equal(res.logs.length, 1, "There must be only one log and it should be CloseChannel");
       // console.log(res.logs); // should log event with close channel
   });
@@ -107,19 +109,19 @@ contract('Ether Ships', async (accounts) => {
       signature, //signature
       pos, // _pos
       0, // _seq,
-      type, // _type 
+      type, // _type
       generatedTree2.nonces[pos], // _nonce
       path.path,
       { from: user1}
     );
-
+    console.log('Dispute fail gas used: '+ res.receipt.gasUsed);
     assert.equal(res.logs.length, 0, "It shouldn't emit any logs because everything is fine");
   });
 
   it('Should be able to get money when he submit score', async() => {
     const channelId = 2;
     const stake = 10;
-    
+
     await etherShips.openChannel(merkle.getRoot(generatedTree1.tree), "0", stake, wallet1.address, {from: user1});
     await etherShips.joinChannel(channelId, merkle.getRoot(generatedTree2.tree), "0", stake,  wallet2.address, {from: user2});
 
@@ -127,7 +129,7 @@ contract('Ether Ships', async (accounts) => {
     const p1balance = p1[1];
 
     const numberOfGuesses = 5;
-    
+
     const hash = merkle.keccak256(channelId, user1, numberOfGuesses);
     const signature = wallet2.signMessage(ethers.utils.arrayify(hash));
 
@@ -137,7 +139,6 @@ contract('Ether Ships', async (accounts) => {
     paths = paths.reduce((a, b) => a.concat(b), []);
 
     pos = pos.map(p => p + 1);
-
     const res = await etherShips.closeChannel(
       channelId, // channelId
       signature, //signature
@@ -147,6 +148,7 @@ contract('Ether Ships', async (accounts) => {
       nonces, // nonces
       { from: user1}
     );
+    console.log('Close channel success gas used: '+ res.receipt.gasUsed);
 
     const p1new = await etherShips.players(user1);
     const p1balanceNew = p1new[1];
@@ -157,12 +159,12 @@ contract('Ether Ships', async (accounts) => {
   it('Should fail if two same positions are sent', async() => {
     const channelId = 3;
     const stake = 10;
-    
+
     await etherShips.openChannel(merkle.getRoot(generatedTree1.tree), "0", stake, wallet1.address, {from: user1});
     await etherShips.joinChannel(channelId, merkle.getRoot(generatedTree2.tree), "0", stake,  wallet2.address, {from: user2});
-    
+
     const numberOfGuesses = 5;
-    
+
     const hash = merkle.keccak256(channelId, user1, numberOfGuesses);
     const signature = wallet2.signMessage(ethers.utils.arrayify(hash));
 
@@ -185,7 +187,9 @@ contract('Ether Ships', async (accounts) => {
         nonces, // nonces
         { from: user1}
       );
-      assert.equal(true, true, "It shouldn't pass to close channel because two same positions are sent");      
+      console.log('Close channel fail gas used: '+ res.receipt.gasUsed);
+
+      assert.equal(true, true, "It shouldn't pass to close channel because two same positions are sent");
     } catch (error) {
     }
 
